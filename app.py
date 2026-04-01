@@ -1,63 +1,83 @@
 """
-ì¹´ì¹´ì¤í¡ ì ì¬ ì¶ì² ì±ë´ - ì¹í ìë²
-Kakao i Open Builder ì¤í¬ ìë²ë¡ ëìí©ëë¤.
+카카오톡 점심 추천 챗봇 - 웹훅 서버
+Kakao i Open Builder 스킬 서버로 동작합니다.
 """
 
 import random
+import threading
+import time
+import urllib.request
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
+
 # ============================================================
-# ð½ï¸ ì ì¬ ë©ë´ ë°ì´í°
-# ìíë ë©ë´ë¥¼ ìì ë¡­ê² ì¶ê°/ìì íì¸ì!
+# ⏰ Keep-Alive (Render 무료 티어 슬립 방지)
+# ============================================================
+
+def keep_alive():
+    """14분마다 자기 자신에게 요청을 보내 서버가 잠들지 않게 합니다."""
+    while True:
+        time.sleep(840)  # 14분
+        try:
+            urllib.request.urlopen("https://kakao-lunch-bot-h8l6.onrender.com/")
+        except Exception:
+            pass
+
+keep_alive_thread = threading.Thread(target=keep_alive, daemon=True)
+keep_alive_thread.start()
+
+# ============================================================
+# 🍽️ 점심 메뉴 데이터
+# 원하는 메뉴를 자유롭게 추가/수정하세요!
 # ============================================================
 
 MENU_DATA = {
-    "íì": [
-        {"name": "ê¹ì¹ì°ê°", "desc": "ì¼í°í ê¹ì¹ì°ê°ì ë°¥ í ê³µê¸° ëë±!"},
-        {"name": "ëì¥ì°ê°", "desc": "êµ¬ìí ëì¥ì°ê°, íêµ­ì¸ì ìì¸í¸ë"},
-        {"name": "ë¹ë¹ë°¥", "desc": "ìë¡ë¬ë¡ ê±´ê°í ë¹ë¹ë°¥ í ê·¸ë¦"},
-        {"name": "ë¶ê³ ê¸° ì ì", "desc": "ë¬ì½¤ìJmì§¤í ë¶ê³ ê¸°ì ë°ë°ì°¬ê¹ì§"},
-        {"name": "ì ì¡ë³¶ì", "desc": "ë§¤ì½¤í ì ì¡ì ë°¥ ë¹ë²¼ë¨¹ê¸° ìµê³ !"},
-        {"name": "ìëë¶ì°ê°", "desc": "ë¶ëë½ê³  ì¼í°í ìëë¶, ê³ë í¡!"},
-        {"name": "ì¼ê²¹ì´", "desc": "ì ì¬ ì¼ê²¹ì´ì ëª» ì°¸ì§... ì ì¸ë¨¹ì!"},
-        {"name": "ì¹¼êµ­ì", "desc": "ììí êµ­ë¬¼ì ì«ê¹í ë©´ë°"},
-        {"name": "ê¹ë°¥ + ë¡ë³¶ì´", "desc": "ë¶ìì ì ì, êµ­ë£° ì¡°í©"},
-        {"name": "ëë©´", "desc": "ììíê² í ê·¸ë¦ íë£¨ë£©"},
+    "한식": [
+        {"name": "김치찌개", "desc": "얼큰한 김치찌개에 밥 한 공기 뚝딱!"},
+        {"name": "된장찌개", "desc": "구수한 된장찌개, 한국인의 소울푸드"},
+        {"name": "비빔밥", "desc": "알록달록 건강한 비빔밥 한 그릇"},
+        {"name": "불고기 정식", "desc": "달콤짭짤한 불고기에 밑반찬까지"},
+        {"name": "제육볶음", "desc": "매콤한 제육에 밥 비벼먹기 최고!"},
+        {"name": "순두부찌개", "desc": "부드럽고 얼큰한 순두부, 계란 톡!"},
+        {"name": "삼겹살", "desc": "점심 삼겹살은 못 참지... 쌈 싸먹자!"},
+        {"name": "칼국수", "desc": "시원한 국물에 쫄깃한 면발"},
+        {"name": "김밥 + 떡볶이", "desc": "분식의 정석, 국룰 조합"},
+        {"name": "냉면", "desc": "시원하게 한 그릇 후루룩"},
     ],
-    "ì¤ì": [
-        {"name": "ì§ì¥ë©´", "desc": "ë¬ì½¤ì§­ì§¤í ì¶ì¥ì ë§¤ë ¥"},
-        {"name": "ì§¬ë¼½", "desc": "ì¼í°í êµ­ë¬¼ì´ ë¹ê¸°ë ë "},
-        {"name": "íìì¡", "desc": "ë°ì­í íìì¡, ë¶ë¨¹? ì°ë¨¹?"},
-        {"name": "ë§íëë¶", "desc": "ë§¤ì½¤í ë§íëë¶ ë®ë°¥ í ê·¸ë¦"},
-        {"name": "ìì¥í¼", "desc": "ììíê³  ìì½¤ë¬ì½¤í ìì¥í¼"},
+    "중식": [
+        {"name": "짜장면", "desc": "달콤짭짤한 춘장의 매력"},
+        {"name": "짬뽕", "desc": "얼큰한 국물이 당기는 날"},
+        {"name": "탕수육", "desc": "바삭한 탕수육, 부먹? 찍먹?"},
+        {"name": "마파두부", "desc": "매콤한 마파두부 덮밥 한 그릇"},
+        {"name": "양장피", "desc": "시원하고 새콤달콤한 양장피"},
     ],
-    "ì¼ì": [
-        {"name": "ì´ë°¥", "desc": "ì ì í ì´ë°¥ í ì ìë¡ ê¸°ë¶ ì í"},
-        {"name": "ë¼ë©", "desc": "ì§í ëì½ì¸ ì¡ìì ë©´ í ì ê°ë½"},
-        {"name": "ëì¹´ì°  ", "desc": "ë°ì­í ëì¹´ì¸ ì ìì¤ ë¬ë¿"},
-        {"name": "ì°ë", "desc": "ë°ëí ì°ë êµ­ë¬¼ì ëª¸ë ë§ìë ë°ë»"},
-        {"name": "ì¹´ë ", "desc": "ë ë í ì¼ë³¸ì ì¹´ë ë¼ì´ì¤"},
+    "일식": [
+        {"name": "초밥", "desc": "신선한 초밥 한 접시로 기분 전환"},
+        {"name": "라멘", "desc": "진한 돈코츠 육수에 면 한 젔가락"},
+        {"name": "돈카츠", "desc": "바삭한 돈카츠에 소스 듬뻑"},
+        {"name": "우동", "desc": "따끈한 우동 국물에 몸도 마음도 따뜻"},
+        {"name": "카레", "desc": "든든한 일본식 카레라이스"},
     ],
-    "ìì": [
-        {"name": "íì¤í", "desc": "í¬ë¦¼? í ë§í ? ì¤ì¼? ë­ë  ì¢ì!"},
-        {"name": "íë²ê±°", "desc": "ì¡ì¦ ê°ë ë²ê±°ë¡ ìëì§ ì¶©ì "},
-        {"name": "í¼ì", "desc": "ì¹ì¦ ì­~ ëì´ëë í¼ì í í"},
-        {"name": "ì¤íì´í¬ ", "desc": "ì¤ëì ì¢ ë­ìë¦¬íê² ì¤íì´í¬"},
-        {"name": "ë¦¬ì¡°ë", "desc": "í¬ë¦¬ë¯¸í ë¦¬ì¡°ë í ê·¸ë¦"},
+    "양식": [
+        {"name": "파스타", "desc": "크림? 토마토? 오일? 뭐든 좋아!"},
+        {"name": "햄버거", "desc": "육즙 가득 버거로 에너지 충전"},
+        {"name": "피자", "desc": "치즈 쥐~ 늘어나는 피자 한 판"},
+        {"name": "스테이크", "desc": "오늘은 좀 럭셔리하게 스테이크"},
+        {"name": "리조또", "desc": "크리미한 리조또 한 그릇"},
     ],
-    "ììì": [
-        {"name": "ìêµ­ì", "desc": "ë² í¸ë¨ ì°êµ­ìë¡ ê¹éµíê²"},
-        {"name": "ííì´", "desc": "ìì½¤ë¬ì½¤í íêµ­ì ë³¶ìë©´"},
-        {"name": "ì¹´ì¤ë§ê°ì´", "desc": "ë¶ëë¬ì´ íêµ­ì ì¹í¨ë¼ ì´ì¤"},
-        {"name": "ë¶ì§", "desc": "íëì´ì ë¶ì§¼ë¡ ì´êµ­ì ì¸ ì ì¬"},
+    "아시안": [
+        {"name": "쌀국수", "desc": "베트남 쌀국수로 깔끔하게"},
+        {"name": "팯타이", "desc": "새콤달콤한 태국식 볶음면"},
+        {"name": "카오만가이", "desc": "부드러운 태국식 치킨라이스"},
+        {"name": "분짜", "desc": "하노이식 분짜로 이국적인 점심"},
     ],
-    "ê°í¸ì": [
-        {"name": "ìëìì¹", "desc": "ê°ë³ê² ìëìì¹ íë ì´ë?"},
-        {"name": "ìë¬ë", "desc": "ì¤ëì ê±´ê°íê² ìë¬ë í ë³¼"},
-        {"name": "í¸ìì  ëìë­", "desc": "ê°ì±ë¹ ê°©! í¸ìì  ëìë½"},
-        {"name": "í  ì¤í¸", "desc": "ê¸¸ê±°ë¦¬ í ì¤í¸ì ê·¸ ë§"},
+    "간편식": [
+        {"name": "샌드위치", "desc": "가볍게 샌드위치 하나 어때?"},
+        {"name": "샐러드", "desc": "오늘은 건강하게 샐러드 한 볼"},
+        {"name": "편의점 도시락", "desc": "가성비 갑! 편의점 도시락"},
+        {"name": "토스트", "desc": "길거리 토스트의 그 맛"},
     ],
 }
 
@@ -68,11 +88,11 @@ for category, items in MENU_DATA.items():
 
 
 # ============================================================
-# ð¯ ì¶ì² ë¡ì§
+# 🎯 추천 로직
 # ============================================================
 
 def get_random_menu(category=None):
-    """ëë´ ë©ë´ ì¶ì²"""
+    """랜덤 메뉴 추천"""
     if category and category in MENU_DATA:
         menu = random.choice(MENU_DATA[category])
         return {**menu, "category": category}
@@ -80,7 +100,7 @@ def get_random_menu(category=None):
 
 
 def get_multiple_recommendations(count=3, category=None):
-    """ì¬ë¬ ê° ë©ë´ ì¶ì² (ì¤ë³µ ìì´)"""
+    """여러 개 메뉴 추천 (중복 없이)"""
     if category and category in MENU_DATA:
         pool = [{"name": m["name"], "desc": m["desc"], "category": category} for m in MENU_DATA[category]]
     else:
@@ -91,11 +111,11 @@ def get_multiple_recommendations(count=3, category=None):
 
 
 # ============================================================
-# ð¨ ì¹´ì¹´ì¤í¡ ìëµ í¬ë§· í¬í¼
+# 📨 카카오톡 응답 포맷 헬퍼
 # ============================================================
 
 def make_simple_text(text):
-    """SimpleText ìëµ"""
+    """SimpleText 응답"""
     return {
         "version": "2.0",
         "template": {
@@ -107,47 +127,12 @@ def make_simple_text(text):
 
 
 def make_card_response(menus):
-    """BasicCard ë¦¬ì¤í¸ ìëµ"""
-    items = []
-    for menu in menus:
-        items.append({
-            "title": f"ð½ï¸ {menu['name']}",
-            "description": f"[{menu['category']}] {menu['desc']}",
-        })
-
-    return {
-        "version": "2.0",
-        "template": {
-            "outputs": [
-                {"simpleText": {"text": "ð° ì¤ëì ì ì¬ ì¶ì²ì´ìì!"}}
-            ] + [
-                {
-                    "basicCard": {
-                        "title": item["title"],
-                        "description": item["description"],
-                    }
-                }
-                for item in items
-            ],
-            "quickReplies": [
-                {"label": "ð² ë¤ì ì¶ì²", "action": "message", "messageText": "ì ì¬ ì¶ì²"},
-                {"label": "ð íì", "action": "message", "messageText": "íì ì¶ì²"},
-                {"label": "ð¥ ì¤ì", "action": "message", "messageText": "ì¤ì ì¶ì²"},
-                {"label": "ð£ ì¼ì", "action": "message", "messageText": "ì¼ì ì¶ì²"},
-                {"label": "ð ìì", "action": "message", "messageText": "ìì ì¶ì²"},
-            ]
-        }
-    }
-
-
-def make_category_list():
-    """ì¹´íê³ ë¦¬ ì í ìëµ"""
-    text = "ì´ë¤ ì¢ë¥ì ììì´ ë¡ê¸°ì¸ì?\n\n"
-    emojis = {"íì": "ð", "ì¤ì": "ð¥", "ì¼ì": "ð£", "ìì": "ð", "ììì": "ð", "ê°í¸ì": "ð¥ª"}
-    for cat in MENU_DATA:
-        emoji = emojis.get(cat, "ð½ï¸")
-        text += f"{emoji} {cat} ({len(MENU_DATA[cat])}ê° ë©ë´)\n"
-    text += "\nìë ë²í¼ì ëë¬ ì ííê±°ë, 'OO ì¶ì²'ì´ë¼ê³  ìë ¥íì¸ì!"
+    """추천 메뉴 응답 (SimpleText로 통합 - 카카오 outputs 최대 3개 제한 준수)"""
+    text = "🎰 오늘의 점심 추천이에요!\n\n"
+    for i, menu in enumerate(menus, 1):
+        text += f"{i}. 🍽️ {menu['name']}\n"
+        text += f"   [{menu['category']}] {menu['desc']}\n\n"
+    text += "마음에 드는 메뉴가 있나요? 😋"
 
     return {
         "version": "2.0",
@@ -156,74 +141,100 @@ def make_category_list():
                 {"simpleText": {"text": text}}
             ],
             "quickReplies": [
-                {"label": "ð² ëë¤ ì¶ì²", "action": "message", "messageText": "ì ì¬ ì¶ì²"},
-                {"label": "ð íì", "action": "message", "messageText": "íì ì¶ì²"},
-                {"label": "ð¥ ì¤ì", "action": "message", "messageText": "ì¤ì ì¶ì²"},
-                {"label": "ð£ ì¼ì", "action": "message", "messageText": "ì¼ì ì¶ì²"},
-                {"label": "ð ìì", "action": "message", "messageText": "ìì ì¶ì²"},
+                {"label": "🎲 다시 추천", "action": "message", "messageText": "점심 추천"},
+                {"label": "🍚 한식", "action": "message", "messageText": "한식 추천"},
+                {"label": "🥟 중식", "action": "message", "messageText": "중식 추천"},
+                {"label": "🍣 일식", "action": "message", "messageText": "일식 추천"},
+                {"label": "🍝 양식", "action": "message", "messageText": "양식 추천"},
+            ]
+        }
+    }
+
+
+def make_category_list():
+    """카테고리 선택 응답"""
+    text = "어떤 종류의 음식이 땥기세요?\n\n"
+    emojis = {"한식": "🍚", "중식": "🥟", "일식": "🍣", "양식": "🍝", "아시안": "🍜", "간편식": "🥪"}
+    for cat in MENU_DATA:
+        emoji = emojis.get(cat, "🍽️")
+        text += f"{emoji} {cat} ({len(MENU_DATA[cat])}개 메뉴)\n"
+    text += "\n아래 버튼을 눌러 선택하거나, 'OO 추천'이라고 입력하세요!"
+
+    return {
+        "version": "2.0",
+        "template": {
+            "outputs": [
+                {"simpleText": {"text": text}}
+            ],
+            "quickReplies": [
+                {"label": "🎲 랜덤 추천", "action": "message", "messageText": "점심 추천"},
+                {"label": "🍚 한식", "action": "message", "messageText": "한식 추천"},
+                {"label": "🥟 중식", "action": "message", "messageText": "중식 추천"},
+                {"label": "🍣 일식", "action": "message", "messageText": "일식 추천"},
+                {"label": "🍝 양식", "action": "message", "messageText": "양식 추천"},
             ]
         }
     }
 
 
 # ============================================================
-# ð ì¹´ì¹´ì¤ ì¹í ìëí¬ì¸í¸
+# 🌐 카카오 웹훅 엔드포인트
 # ============================================================
 
 @app.route("/", methods=["GET"])
 def health_check():
-    """ìë² ìí íì¸"""
-    return jsonify({"status": "ok", "message": "ì ì¬ ì¶ì² ë´ì´ ì¤í ì¤ìëë¤! ð½ï¸"})
+    """서버 상태 확인"""
+    return jsonify({"status": "ok", "message": "점심 추천 봇이 실행 중입니다! 🍽️"})
 
 
 @app.route("/api/lunch", methods=["POST"])
 def lunch_recommend():
     """
-    ë©ì¸ ì ì¬ ì¶ì² ì¤í¬ ìëí¬ì¸í¸
-    Kakao i Open Builderìì ì´ URLì ì¤í¬ ìë²ë¡ ë±ë¡íì¸ì.
+    메인 점심 추천 스킬 엔드포인트
+    Kakao i Open Builder에서 이 URL을 스킬 서버로 등록하세요.
     """
     try:
         body = request.get_json()
         utterance = body.get("userRequest", {}).get("utterance", "").strip()
 
-        # ì¹´íê³ ë¦¬ ê°ì§
+        # 카테고리 감지
         detected_category = None
         for category in MENU_DATA:
             if category in utterance:
                 detected_category = category
                 break
 
-        # ë©ë´ ëª©ë¡ ìì²­
-        if "ëª©ë¡" in utterance or "ì¹´íê³ ë¦¬" in utterance or "ì¢ë¥" in utterance:
+        # 메뉴 목록 요청
+        if "목록" in utterance or "카테고리" in utterance or "종류" in utterance:
             return jsonify(make_category_list())
 
-        # ì¶ì² ìì²­ ì²ë¦¬
-        if "ì¶ì²" in utterance or "ë­ ë¨¹" in utterance or "ì ì¬" in utterance or "ë©ë´" in utterance:
+        # 추천 요청 처리
+        if "추천" in utterance or "뭐 먹" in utterance or "점심" in utterance or "메뉴" in utterance:
             menus = get_multiple_recommendations(3, detected_category)
             return jsonify(make_card_response(menus))
 
-        # ê¸°ë³¸ ìëµ (ì¸ì¬ ë±)
+        # 기본 응답 (인사 등)
         return jsonify(make_simple_text(
-            "ìëíì¸ì! ð½ï¸ ì ì¬ ì¶ì² ë´ì´ìì!\n\n"
-            "ìë ëªë ¹ì´ë¥¼ ì¬ì©í´ë³´ì¸ì:\n"
-            "â¢ 'ì ì¬ ì¶ì²' - ëë´ 3ê° ë©ë´ ì¶ì²\n"
-            "â¢ 'íì ì¶ì²' - íì ë©ë´ ì¶ì²\n"
-            "â¢ 'ë©ë´ ëª©ë¡' - ì ì²´ ì¹´íê³ ë¦¬ ë³´ê¸°\n\n"
-            "ì¤ë ì ì¬ ë­ ë¨¹ìì§ ê°ì´ ê³¨ë¼ë´ì! ð"
+            "안녕하세요! 🍽️ 점심 추천 봇이에요!\n\n"
+            "아래 명령어를 사용해보세요:\n"
+            "• '점심 추천' - 랜덤 3개 메뉴 추천\n"
+            "• '한식 추천' - 한식 메뉴 추천\n"
+            "• '메뉴 목록' - 전체 카테고리 보기\n\n"
+            "오늘 점심 뭐 먹을지 같이 골라봐요! 😋"
         ))
 
     except Exception as e:
-        return jsonify(make_simple_text(f"ì, ì¤ë¥ê° ë°ìíì´ì ð\nì ì í ë¤ì ìëí´ì£¼ì¸ì."))
+        return jsonify(make_simple_text(f"앛, 오류가 발생했어요 😅\n잠시 후 다시 시도해주세요."))
 
 
 @app.route("/api/category", methods=["POST"])
 def category_list():
-    """ì¹´íê³ ë¦¬ ëª©ë¡ ì¤í¬ ìëí¬ì¸í¸"""
+    """카테고리 목록 스킬 엔드포인트"""
     return jsonify(make_category_list())
 
 
 # ============================================================
-# ð ìë² ì¤í
+# 🚀 서버 실행
 # ============================================================
 
 if __name__ == "__main__":
